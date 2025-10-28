@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fraud Detection System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            margin: 30px auto;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 25px;
+        }
+        .form-group {
+            margin-bottom: 18px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="number"],
+        input[type="date"],
+        select {
+            width: calc(100% - 22px); 
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box; 
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 17px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 8px;
+            background-color: #e8f8f5;
+            border: 1px solid #d1f2eb;
+            color: #21618c;
+            display: none; 
+            font-size: 18px;
+            line-height: 1.6;
+        }
+        .result strong {
+            color: #1a5276;
+        }
+        .result.fraud {
+            background-color: #faded2; 
+            border-color: #f5b090; 
+            color: #c0392b; 
+        }
+        .error {
+            color: #e74c3c;
+            background-color: #faded2;
+            border: 1px solid #f5b090;
+            padding: 10px;
+            margin-top: 15px;
+            border-radius: 5px;
+            display: none;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Fraud Detection System</h1>
+        <div id="prediction-form">
+            <div class="form-group">
+                <label for="inscClaimAmtReimbursed">InscClaimAmtReimbursed:</label>
+                <input type="number" id="inscClaimAmtReimbursed" value="0" placeholder="e.g., 5000">
+            </div>
+
+            <div class="form-group">
+                <label for="deductibleAmtPaid">DeductibleAmtPaid:</label>
+                <input type="number" id="deductibleAmtPaid" value="0" placeholder="e.g., 100">
+            </div>
+
+            <div class="form-group">
+                <label for="is_inpatient">Is Inpatient Claim?</label>
+                <select id="is_inpatient">
+                    <option value="1">Yes</option>
+                    <option value="0" selected>No</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="admissionDt">Admission Date:</label>
+                <input type="date" id="admissionDt">
+            </div>
+
+            <div class="form-group">
+                <label for="dischargeDt">Discharge Date:</label>
+                <input type="date" id="dischargeDt">
+            </div>
+
+            <div class="form-group">
+                <label for="numClaims">Number of Claims for Provider (Estimate/Default):</label>
+                <input type="number" id="numClaims" value="1" placeholder="e.g., 1">
+                <small style="color: #666;">(In a real system, this would typically be calculated by the backend.)</small>
+            </div>
+
+            <button onclick="predictFraud()">Predict Fraud</button>
+        </div>
+
+        <div id="predictionResult" class="result">
+            <strong>Prediction:</strong> <span id="predictionText"></span><br>
+            <strong>Probability of Fraud:</strong> <span id="probabilityText"></span>
+        </div>
+        <div id="errorMessage" class="error"></div>
+    </div>
+
+    <script>
+        async function predictFraud() {
+            // Get values from form inputs
+            const inscClaimAmtReimbursed = parseFloat(document.getElementById('inscClaimAmtReimbursed').value);
+            const deductibleAmtPaid = parseFloat(document.getElementById('deductibleAmtPaid').value);
+            const isInpatient = parseInt(document.getElementById('is_inpatient').value);
+            const admissionDt = document.getElementById('admissionDt').value; // YYYY-MM-DD string
+            const dischargeDt = document.getElementById('dischargeDt').value; // YYYY-MM-DD string
+            const numClaims = parseFloat(document.getElementById('numClaims').value);
+
+            const errorMessageDiv = document.getElementById('errorMessage');
+            const predictionResultDiv = document.getElementById('predictionResult');
+
+            // Reset previous messages/results
+            errorMessageDiv.style.display = 'none';
+            errorMessageDiv.innerText = '';
+            predictionResultDiv.style.display = 'none';
+            predictionResultDiv.classList.remove('fraud'); 
+
+            // Basic client-side validation
+            if (isNaN(inscClaimAmtReimbursed) || isNaN(deductibleAmtPaid) || isNaN(isInpatient) || isNaN(numClaims)) {
+                errorMessageDiv.innerText = 'Please enter valid numbers for all numerical fields.';
+                errorMessageDiv.style.display = 'block';
+                return;
+            }
+            if (!admissionDt && dischargeDt) {
+                errorMessageDiv.innerText = 'Please provide both Admission Date and Discharge Date, or neither.';
+                errorMessageDiv.style.display = 'block';
+                return;
+            }
+            if (admissionDt && !dischargeDt) {
+                errorMessageDiv.innerText = 'Please provide Discharge Date when Admission Date is entered.';
+                errorMessageDiv.style.display = 'block';
+                return;
+            }
+            if (admissionDt && dischargeDt && new Date(admissionDt) > new Date(dischargeDt)) {
+                errorMessageDiv.innerText = 'Admission Date cannot be after Discharge Date.';
+                errorMessageDiv.style.display = 'block';
+                return;
+            }
+
+
+            // Prepare data to send to backend (keys must match backend's expected input)
+            const data = {
+                InscClaimAmtReimbursed: inscClaimAmtReimbursed,
+                DeductibleAmtPaid: deductibleAmtPaid,
+                is_inpatient: isInpatient,
+                AdmissionDt: admissionDt || null, 
+                DischargeDt: dischargeDt || null, 
+                NumClaims: numClaims
+            };
+
+            try {
+                const response = await fetch('http://127.0.0.1:5000/predict', { // IMPORTANT: Ensure this URL matches your Flask app's address
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json' // Request JSON response
+                    },
+                    body: JSON.stringify(data),
+                });
+
+                if (!response.ok) {
+                    const errorResponse = await response.json(); 
+                    throw new Error(errorResponse.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json(); 
+                const predictionText = document.getElementById('predictionText');
+                const probabilityText = document.getElementById('probabilityText');
+
+                predictionText.innerText = result.prediction;
+                probabilityText.innerText = (result.probability_of_fraud * 100).toFixed(2) + '%';
+
+                predictionResultDiv.style.display = 'block';
+
+                if (result.prediction === 'Potential Fraud') {
+                    predictionResultDiv.classList.add('fraud');
+                } else {
+                    predictionResultDiv.classList.remove('fraud');
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                errorMessageDiv.innerText = 'Error making prediction: ' + error.message;
+                errorMessageDiv.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>
